@@ -53,10 +53,12 @@ let query = async <a>(x:string, param:any) => {
 }
 
 const runApp = async () => {
+    try{
     await Moralis.start({
         apiKey: "ArBIlASMaBR3Z9cs9sT7K7eHYt4knMUUJQzZ9vGJKf3XSeXwyQqXaOAWbnRfO9Vl",
         // ...and any other configuration
     });
+    } catch (e) {}
     let chain = "bsc_testnet"
     const evm_chain = chain == "bsc_testnet" ? EvmChain.BSC_TESTNET : EvmChain.BSC;
 
