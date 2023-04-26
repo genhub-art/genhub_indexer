@@ -77,6 +77,22 @@ const runApp = async () => {
     console.log(collections_metadatas)
 };
 
-runApp();
 
 
+'use strict';
+
+const express = require('express');
+
+// Constants
+const PORT = 8080;
+
+// App
+const app = express();
+app.get('/', (req, res) => {
+    
+  runApp().then(() => res.send('Done'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Running on ${PORT}`);
+});
