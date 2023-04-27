@@ -15,7 +15,10 @@ type Collection = {
         description: string;
         image: string;
         external_url: string;
-    }
+        generator_url: string;
+    };
+    price: number;
+    max_supply: number;
 }
 
 type NFT = {
@@ -68,13 +71,17 @@ const runApp = async () => {
     let collections : string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
     let collections_metadatas = 
         await Promise.all(
-            collections.map(x => 
-                call(x, collection_abi, "contractURI", [], evm_chain)
-                .then((uri:string) => 
-                http_get(uri).then(metadata =>
-                {return {chain,address:x,metadata}}) ) ));
-    let params = collections_metadatas.map((x,i) => `(:chain${i}, :address${i}, :metadata${i}::json)`) 
-    let values = collections_metadatas.reduce((acc,x,i) => ({...acc, [`chain${i}`]:x.chain, [`address${i}`]:x.address, [`metadata${i}`]:JSON.stringify(x.metadata)}), {})
+            collections.map(async x =>
+            {
+                let uri : string = await call(x, collection_abi, "contractURI", [], evm_chain)
+                let metadata = await http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => {})
+                let price = await call(x, collection_abi, "getPrice", [], evm_chain)
+                let max_supply = await call(x, collection_abi, "getMaxTid", [], evm_chain)
+                return {chain,address:x,metadata, price, max_supply} 
+            }
+            ));
+    let params = collections_metadatas.map((x,i) => `(:chain${i}, :address${i}, :metadata${i}::json, :price${i}, :max_supply${i})`).join(", ") 
+    let values = collections_metadatas.reduce((acc,x,i) => ({...acc, [`chain${i}`]:x.chain, [`address${i}`]:x.address, [`metadata${i}`]:JSON.stringify(x.metadata), [`price${i}`]:x.price, [`max_supply${i}`]:x.max_supply}), {})
     await query(`INSERT INTO nftm.collections VALUES ${params} ON CONFLICT (chain, address) DO nothing;`, values )
     console.log(collections_metadatas)
 };
