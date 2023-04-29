@@ -18,6 +18,7 @@ type Collection = {
         generator_url: string;
     };
     price: number;
+    current_supply: number;
     max_supply: number;
 }
 
@@ -54,7 +55,9 @@ let query = async <a>(x:string, param:any) => {
         client.release()
     }
 }
-
+let dbg = <a>(x:a) => {console.log(x); return x}
+let promise_sequential = async <a> (xs: (() => Promise<a>)[]) =>
+    xs.reduce(async (acc, x) => [...await acc, await x()], Promise.resolve([] as a[]))
 const runApp = async () => {
     try{
     await Moralis.start({
@@ -67,23 +70,27 @@ const runApp = async () => {
 
     const factory_address = "0x9493a61C8DBA11b0c3428cE947fb20CA7b2016f1";
 
-    
-    let collections : string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
-    let collections_metadatas = 
-        await Promise.all(
-            collections.map(async x =>
-            {
-                let uri : string = await call(x, collection_abi, "contractURI", [], evm_chain)
-                let metadata = await http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => {})
-                let price = await call(x, collection_abi, "getPrice", [], evm_chain)
-                let max_supply = await call(x, collection_abi, "getMaxTid", [], evm_chain)
-                return {chain,address:x,metadata, price, max_supply} 
-            }
-            ));
-    let params = collections_metadatas.map((x,i) => `(:chain${i}, :address${i}, :metadata${i}::json, :price${i}, :max_supply${i})`).join(", ") 
-    let values = collections_metadatas.reduce((acc,x,i) => ({...acc, [`chain${i}`]:x.chain, [`address${i}`]:x.address, [`metadata${i}`]:JSON.stringify(x.metadata), [`price${i}`]:x.price, [`max_supply${i}`]:x.max_supply}), {})
-    await query(`INSERT INTO nftm.collections VALUES ${params} ON CONFLICT (chain, address) DO nothing;`, values )
-    console.log(collections_metadatas)
+    try {
+        let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
+        console.log(collections)
+        let collections_metadatas =
+            await promise_sequential(
+                collections.map((x) => async () => {
+                    let uri : string = await call(x, collection_abi, "contractURI", [], evm_chain)
+                    let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => { })
+                    let get_price = call(x, collection_abi, "getPrice", [], evm_chain)
+                    let get_max_supply = call(x, collection_abi, "getMaxTid", [], evm_chain)
+                    let get_current_supply = call(x, collection_abi, "getCurrentTid", [], evm_chain)
+                    //do above requests in parallel
+                    let [metadata, price, max_supply, current_supply] = await Promise.all([get_metadata, get_price, get_max_supply, get_current_supply])
+                    await new Promise(r => setTimeout(r, 300));
+                    return dbg({chain, address: x, metadata, price, current_supply, max_supply} as Collection)
+                    }
+                )).catch(_ => [] as Collection[]);
+        let params = collections_metadatas.map((x,i) => `(:chain${i}, :address${i}, :metadata${i}::json, :price${i}, :current_supply${i}, :max_supply${i})`).join(", ")
+        let values = collections_metadatas.reduce((acc,x,i) => ({...acc, [`chain${i}`]:x.chain, [`address${i}`]:x.address, [`metadata${i}`]:JSON.stringify(x.metadata), [`price${i}`]:x.price, [`max_supply${i}`]:x.max_supply, [`current_supply${i}`]:x.current_supply}), {})
+        await query(`INSERT INTO nftm.collections (chain, address, metadata, price, current_supply, max_supply) VALUES ${params} ON CONFLICT (chain, address) DO update set metadata = excluded.metadata, price = excluded.price, current_supply = excluded.current_supply, max_supply = excluded.max_supply;`, values )
+    } catch (e) { console.log(e)}
 };
 
 
@@ -103,5 +110,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Running on ${PORT}`);
+  console.log(`Running on http://localhost:${PORT}`);
 });
