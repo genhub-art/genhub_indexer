@@ -28,6 +28,7 @@ type NFT = {
     chain: string;
     collection: string;
     token_id: string;
+    owner: string;
     metadata:{
         name: string;
         description: string;
@@ -120,15 +121,17 @@ const runApp = async () => {
                         }))
                         console.log("nfts_metadata", nfts_metadata)
                         //insert nfts into nftm.nfts
-                        let params = nfts_metadata.map((x, i) => `(:chain${i}, :collection${i}, :token_id${i}, :metadata${i}::json)`).join(", ")
+                        let params = nfts_metadata.map((x, i) => `(:chain${i}, :collection${i}, :token_id${i}, :owner${i}, :metadata${i}::json)`).join(", ")
                         let values = nfts_metadata.reduce((acc, x, i) => ({
                             ...acc,
                             [`chain${i}`]: x.chain,
                             [`collection${i}`]: x.collection,
                             [`token_id${i}`]: x.token_id,
+                            [`owner${i}`]: x.owner,
                             [`metadata${i}`]: JSON.stringify(x.metadata)
                         }), {})
-                        await query(dbg(`INSERT INTO nftm.nfts (chain, collection, token_id, metadata) VALUES ${params} ON CONFLICT DO NOTHING`), values)
+                        
+                        await query(dbg(`INSERT INTO nftm.nfts (chain, collection, token_id, owner, metadata) VALUES ${params} ON CONFLICT (chain, collection, token_id) do update set owner=excluded.owner;`), values).catch(e => console.log(e))
                     }
                     await new Promise(r => setTimeout(r, 300));
                     return dbg({chain, address: collection_address, metadata, price, current_supply, max_supply} as Collection)
