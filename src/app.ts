@@ -78,7 +78,7 @@ const runApp = async () => {
     try {
         let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
         console.log(collections)
-        let browser = await  puppeteer.launch()
+        let browser = await  puppeteer.launch({args: ['--no-sandbox', '--disable-setuid-sandbox']})
         let collections_metadatas =
             await promise_sequential(
                 collections.map((collection_address) => async () => {
@@ -140,7 +140,7 @@ const runApp = async () => {
         await browser.close()
         let params = collections_metadatas.map((x,i) => `(:chain${i}, :address${i}, :metadata${i}::json, :price${i}, :current_supply${i}, :max_supply${i})`).join(", ")
         let values = collections_metadatas.reduce((acc,x,i) => ({...acc, [`chain${i}`]:x.chain, [`address${i}`]:x.address, [`metadata${i}`]:JSON.stringify(x.metadata), [`price${i}`]:x.price, [`max_supply${i}`]:x.max_supply, [`current_supply${i}`]:x.current_supply}), {})
-        // await query(`INSERT INTO nftm.collections (chain, address, metadata, price, current_supply, max_supply) VALUES ${params} ON CONFLICT (chain, address) DO update set metadata = excluded.metadata, price = excluded.price, current_supply = excluded.current_supply, max_supply = excluded.max_supply;`, values )
+        await query(`INSERT INTO nftm.collections (chain, address, metadata, price, current_supply, max_supply) VALUES ${params} ON CONFLICT (chain, address) DO update set metadata = excluded.metadata, price = excluded.price, current_supply = excluded.current_supply, max_supply = excluded.max_supply;`, values )
     } catch (e) { console.log(e)}
 };
 

@@ -1,4 +1,4 @@
-FROM node:alpine
+FROM buildkite/puppeteer
 WORKDIR /usr/nftm_indexer
 COPY package.json .
 RUN npm install\
