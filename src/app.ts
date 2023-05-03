@@ -78,7 +78,9 @@ const runApp = async () => {
     try {
         let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
         console.log(collections)
-        let browser = await  puppeteer.launch({args: ['--no-sandbox', '--disable-setuid-sandbox']})
+        let browser = await  puppeteer.launch({
+            executablePath: '/usr/bin/google-chrome',
+            args: ['--no-sandbox', '--disable-setuid-sandbox']})
         let collections_metadatas =
             await promise_sequential(
                 collections.map((collection_address) => async () => {
