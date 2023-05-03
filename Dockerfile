@@ -2,7 +2,7 @@ FROM buildkite/puppeteer
 WORKDIR /usr/nftm_indexer
 COPY package.json .
 RUN npm install\
-        && npm install typescript -g && npm install puppeteer
+        && npm install typescript -g
 COPY . .
 RUN tsc
 EXPOSE 8080
