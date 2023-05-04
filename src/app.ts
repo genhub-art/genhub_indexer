@@ -101,41 +101,52 @@ const runApp = async () => {
                             return {chain, collection: collection_address, token_id: x.token_id, owner: x.owner_of}
                         }))
                         console.log("nfts_id_owner", nfts_id_owner)
-                        let nfts_metadata: NFT[] = await promise_sequential(nfts_id_owner.map(x => async () => {
-                            let nft_generator_uri_instance = (metadata as any).generator_url + "/?gxhash=" + x.token_id
-                            console.log("nft_generator_uri_instance", nft_generator_uri_instance)
-                            let page = await browser.newPage()
-                            console.log("page")
-                            await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
-                            console.log("page.goto")
-                            //@ts-ignore
-                            let nft_metadata = await page.evaluate(() =>  gxmetadata())
-                            console.log("nft_metadata", nft_metadata)
-                            return {
-                                ...x,
-                                metadata: {
-                                    ...nft_metadata,
-                                    generator_instance_url: nft_generator_uri_instance,
-                                    animation_url: nft_generator_uri_instance,
-                                    external_url: nft_generator_uri_instance
-                                }
-                            } as NFT
-                        }))
+                        let nfts_metadata: void[] = await promise_sequential(
+                            nfts_id_owner.map(x => async () => {
+                            let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
+                            if (already_has_metadata) {
+                                console.log("already_has_metadata", x)
+                                await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", x)
+                            } else {
+                                let nft_generator_uri_instance = (metadata as any).generator_url + "/?gxhash=" + x.token_id
+                                console.log("nft_generator_uri_instance", nft_generator_uri_instance)
+                                let page = await browser.newPage()
+                                console.log("page")
+                                await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
+                                console.log("page.goto")
+                                //@ts-ignore
+                                let nft_metadata = await page.evaluate(() => gxmetadata())
+                                page.close()
+                                console.log("nft_metadata", nft_metadata)
+                                let nft_with_metadata = {
+                                    ...x,
+                                    metadata: {
+                                        ...nft_metadata,
+                                        generator_instance_url: nft_generator_uri_instance,
+                                        animation_url: nft_generator_uri_instance,
+                                        external_url: nft_generator_uri_instance
+                                    }
+                                } as NFT
+                                await query("insert into nftm.nfts (chain, collection, token_id, owner, metadata) values (:chain, :collection, :token_id, :owner, :metadata::json) on conflict (chain, collection, token_id) do update set owner=excluded.owner, metadata=excluded.metadata", nft_with_metadata)
+                                
+                            }
+                            
+                            }))
                         console.log("nfts_metadata", nfts_metadata)
                         //insert nfts into nftm.nfts
-                        let params = nfts_metadata.map((x, i) => `(:chain${i}, :collection${i}, :token_id${i}, :owner${i}, :metadata${i}::json)`).join(", ")
-                        let values = nfts_metadata.reduce((acc, x, i) => ({
-                            ...acc,
-                            [`chain${i}`]: x.chain,
-                            [`collection${i}`]: x.collection,
-                            [`token_id${i}`]: x.token_id,
-                            [`owner${i}`]: x.owner,
-                            [`metadata${i}`]: JSON.stringify(x.metadata)
-                        }), {})
+                        // let params = nfts_metadata.map((x, i) => `(:chain${i}, :collection${i}, :token_id${i}, :owner${i}, :metadata${i}::json)`).join(", ")
+                        // let values = nfts_metadata.reduce((acc, x, i) => ({
+                        //     ...acc,
+                        //     [`chain${i}`]: x.chain,
+                        //     [`collection${i}`]: x.collection,
+                        //     [`token_id${i}`]: x.token_id,
+                        //     [`owner${i}`]: x.owner,
+                        //     [`metadata${i}`]: JSON.stringify(x.metadata)
+                        // }), {})
                         
-                        await query(dbg(`INSERT INTO nftm.nfts (chain, collection, token_id, owner, metadata) VALUES ${params} ON CONFLICT (chain, collection, token_id) do update set owner=excluded.owner;`), values).catch(e => console.log(e))
+                        // await query(dbg(`INSERT INTO nftm.nfts (chain, collection, token_id, owner, metadata) VALUES ${params} ON CONFLICT (chain, collection, token_id) do update set owner=excluded.owner;`), values).catch(e => console.log(e))
                     }
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, 30));
                     return dbg({chain, address: collection_address, metadata, price, current_supply, max_supply} as Collection)
                     }
                 )).catch(_ => [] as Collection[]);
