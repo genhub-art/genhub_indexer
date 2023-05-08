@@ -76,7 +76,7 @@ const runApp = async () => {
         // ...and any other configuration
     });
     } catch (e) {}
-    
+    console.log("loaded moralis")
     
     try {
         let chains_and_factories =
@@ -85,7 +85,7 @@ const runApp = async () => {
                     chain: x.chain,
                     factory_address: x.address,
                     evm_chain: x.chain == "bsc_testnet" ? EvmChain.BSC_TESTNET : EvmChain.BSC}}))
-        
+        console.log(chains_and_factories)
         chains_and_factories.forEach(async ({chain, factory_address, evm_chain}) => {
 
             let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
