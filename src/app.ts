@@ -77,7 +77,12 @@ const runApp = async () => {
     });
     } catch (e) {}
     console.log("loaded moralis")
-    
+
+    let browser = await puppeteer.launch({
+        executablePath: 'google-chrome-stable',
+        // executablePath: '/usr/bin/google-chrome',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }).catch(e => {console.log("puppeteer launch error: ", e); return undefined})
     try {
         let chains_and_factories =
             await query("select chain, address from nftm.factories", {})
@@ -90,11 +95,6 @@ const runApp = async () => {
             console.log("processing chain", chain, "factory", factory_address)
             let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
             console.log(collections)
-            let browser = await puppeteer.launch({
-                executablePath: 'google-chrome-stable',
-                // executablePath: '/usr/bin/google-chrome',
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            }).catch(e => {console.log("puppeteer launch error: ", e); return undefined})
             let collections_metadatas =
                 await promise_sequential(
                     collections.map((collection_address) => async () => {
@@ -165,8 +165,8 @@ const runApp = async () => {
                             await new Promise(r => setTimeout(r, 30));
                         }
                     )).catch(_ => [] as Collection[]);
-            await browser.close()
-        }))   
+        }))
+    await browser.close()
     } catch (e) { console.log(e)}
 };
 
