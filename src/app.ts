@@ -5,6 +5,7 @@ import fetch from "cross-fetch";
 import { Pool } from "pg"
 import { pg as mk_sql_query } from "yesql"
 import * as puppeteer from 'puppeteer';
+const { createHash } = require('crypto');
 
 const dotenv = require('dotenv');
 dotenv.config();
@@ -24,7 +25,7 @@ type Collection = {
     current_supply: number;
     max_supply: number;
 }
-type ERC1155Metadata = {
+type ERC1155TokenMetadata = {
     name: string;
     description: string;
     image: string;
@@ -40,8 +41,10 @@ type NFT = {
     collection: string;
     token_id: string;
     owner: string;
-    metadata: ERC1155Metadata;
+    metadata: ERC1155TokenMetadata;
 };
+
+let sha256 = (x:string) => createHash('sha256').update(x).digest('hex');
 
 let call = <a>(address, abi, functionName, params, chain) : Promise<a> => Moralis.EvmApi.utils.runContractFunction({
     address,
@@ -132,14 +135,14 @@ const runApp = async () => {
                                             console.log("already_has_metadata", x)
                                             await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", x)
                                         } else {
-                                            let nft_generator_uri_instance = (metadata as any).generator_url + "/?gxhash=" + x.token_id
+                                            let nft_generator_uri_instance = (metadata as any).generator_url + `/?seed=${sha256(`${process.env.SEED_SHA256_SECRET},${x.chain},${x.collection},${x.token_id}`)}&token_id=${x.token_id}`
                                             console.log("nft_generator_uri_instance", nft_generator_uri_instance)
                                             let page = await browser.newPage()
                                             console.log("page")
                                             await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
                                             console.log("page.goto")
                                             //@ts-ignore
-                                            let nft_metadata = await page.evaluate(() => gxmetadata())
+                                            let nft_metadata = await page.evaluate(() => metadata())
                                             page.close()
                                             console.log("nft_metadata", nft_metadata)
                                             let nft_with_metadata = {
