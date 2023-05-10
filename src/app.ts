@@ -94,7 +94,7 @@ const runApp = async () => {
                 await promise_sequential(
                     collections.map((collection_address) => async () => {
                             let uri: string = await call(collection_address, collection_abi, "contractURI", [], evm_chain)
-                            let get_creator: string = await call(collection_address, collection_abi, "creator", [], evm_chain)
+                            let get_creator: string = await call(collection_address, collection_abi, "creator", [], evm_chain).then((x:string) => x.toLowerCase())
                             let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => {
                             })
                             let get_price = call(collection_address, collection_abi, "getPrice", [], evm_chain)
