@@ -78,11 +78,6 @@ const runApp = async () => {
     } catch (e) {}
     console.log("loaded moralis")
 
-    let browser = await puppeteer.launch({
-        executablePath: 'google-chrome-stable',
-        // executablePath: '/usr/bin/google-chrome',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }).catch(e => {console.log("puppeteer launch error: ", e); return undefined})
     try {
         let chains_and_factories =
             await query("select chain, address from nftm.factories", {})
@@ -131,6 +126,7 @@ const runApp = async () => {
                                 console.log("nfts_id_owner", nfts_id_owner)
                                 let nfts_metadata: void[] = await promise_sequential(
                                     nfts_id_owner.map(x => async () => {
+                                        console.log("getting metadata for nft", x)
                                         let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
                                         if (already_has_metadata) {
                                             console.log("already_has_metadata", x)
@@ -138,13 +134,20 @@ const runApp = async () => {
                                         } else {
                                             let nft_generator_uri_instance = (metadata as any).generator_url + `/?seed=${sha256(`${process.env.SEED_SHA256_SECRET},${x.chain},${x.collection},${x.token_id}`)}&token_id=${x.token_id}`
                                             console.log("nft_generator_uri_instance", nft_generator_uri_instance)
-                                            let page = await browser.newPage()
+                                            let browser = await puppeteer.launch({
+                                                executablePath: 'google-chrome-stable',
+                                                // executablePath: '/usr/bin/google-chrome',
+                                                args: ['--no-sandbox', '--disable-setuid-sandbox']
+                                            }).catch(e => {console.log("puppeteer launch error: ", e); return undefined})
+                                            console.log("loaded puppeteer", browser)
+                                            let page = await browser.newPage().catch(e => {console.log("browser.newPage error: ", e); return undefined})
                                             console.log("page")
                                             await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
                                             console.log("page.goto")
                                             //@ts-ignore
                                             let nft_metadata = await page.evaluate(() => metadata())
-                                            page.close()
+                                            await page.close()
+                                            await browser.close()
                                             console.log("nft_metadata", nft_metadata)
                                             let nft_with_metadata = {
                                                 ...x,
@@ -155,6 +158,7 @@ const runApp = async () => {
                                                     external_url: nft_generator_uri_instance
                                                 }
                                             } as NFT
+                                            
                                             await query("insert into nftm.nfts (chain, collection, token_id, owner, metadata) values (:chain, :collection, :token_id, :owner, :metadata::json) on conflict (chain, collection, token_id) do update set owner=excluded.owner, metadata=excluded.metadata", nft_with_metadata)
 
                                         }
@@ -164,9 +168,8 @@ const runApp = async () => {
                             }
                             await new Promise(r => setTimeout(r, 30));
                         }
-                    )).catch(_ => [] as Collection[]);
+                    )).catch(e => console.log("promise_sequential error: ", e))
         }))
-    await browser.close()
     } catch (e) { console.log(e)}
 };
 
