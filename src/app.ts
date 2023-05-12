@@ -86,7 +86,7 @@ const runApp = async () => {
                     factory_address: x.address,
                     evm_chain: x.chain == "bsc_testnet" ? EvmChain.BSC_TESTNET : EvmChain.BSC}}))
         console.log(chains_and_factories)
-        promise_sequential(chains_and_factories.map(({chain, factory_address, evm_chain}) => async () => {
+        await promise_sequential(chains_and_factories.map(({chain, factory_address, evm_chain}) => async () => {
             console.log("processing chain", chain, "factory", factory_address)
             let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
             console.log(collections)
