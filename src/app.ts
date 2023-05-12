@@ -6,6 +6,7 @@ import { Pool } from "pg"
 import { pg as mk_sql_query } from "yesql"
 import * as puppeteer from 'puppeteer';
 const { createHash } = require('crypto');
+const { ethers } = require("ethers");
 
 const dotenv = require('dotenv');
 dotenv.config();
@@ -46,13 +47,18 @@ type NFT = {
 
 let sha256 = (x:string) => createHash('sha256').update(x).digest('hex');
 
-let call = <a>(address, abi, functionName, params, chain) : Promise<a> => Moralis.EvmApi.utils.runContractFunction({
-    address,
-    abi,
-    functionName,
-    params,
-    chain,
-}).then(x => x.toJSON() as a);
+let call = <a>(address, abi, functionName, params, chain) : Promise<a> => {
+    let ethersjs_provider = new ethers.JsonRpcProvider('https://data-seed-prebsc-1-s1.binance.org:8545')
+    let ethersjs_contract = new ethers.Contract(address, abi, ethersjs_provider)
+    return ethersjs_contract[functionName](...params)
+}
+    // Moralis.EvmApi.utils.runContractFunction({
+    // address,
+    // abi,
+    // functionName,
+    // params,
+    // chain,
+// }).then(x => x.toJSON() as a);
 let http_get = <a>(url:string): Promise<a> => fetch(url).then(res => res.json() as a);
 
 const pool =  new Pool({connectionString: process.env.DATABASE_URL})
@@ -66,6 +72,7 @@ let query = async <a>(x:string, param:any) => {
         client.release()
     }
 }
+//old bsc testnet 0x5022cDa25534e0276DabFA1973e54E7B7BC87f56
 let dbg = <a>(x:a) => {console.log(x); return x}
 let promise_sequential = async <a> (xs: (() => Promise<a>)[]) =>
     xs.reduce(async (acc, x) => [...await acc, await x()], Promise.resolve([] as a[]))
@@ -93,7 +100,7 @@ const runApp = async () => {
             let collections_metadatas =
                 await promise_sequential(
                     collections.map((collection_address) => async () => {
-                            // let collection_already_exists = (await query("select * from nftm.collections where chain = :chain and address = :address", {chain, address: collection_address}))
+                            let existing_metadata: {metadata:ERC1155TokenMetadata}[] = await query("select metadata, current_supply from nftm.collections where chain = :chain and address = :address", {chain, address: collection_address})
                             let uri: string = await call(collection_address, collection_abi, "contractURI", [], evm_chain)
                             let get_creator: string = await call(collection_address, collection_abi, "creator", [], evm_chain).then((x:string) => x.toLowerCase())
                             let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => { })
@@ -101,7 +108,8 @@ const runApp = async () => {
                             let get_max_supply = call(collection_address, collection_abi, "getMaxTid", [], evm_chain)
                             let get_current_supply = call(collection_address, collection_abi, "getCurrentTid", [], evm_chain)
                             //do above requests in parallel
-                            let [creator, metadata, price, max_supply, current_supply] = await Promise.all([get_creator, get_metadata, get_price, get_max_supply, get_current_supply])
+                            let metadata = existing_metadata.length > 0 ? existing_metadata[0].metadata : await get_metadata
+                            let [creator, price, max_supply, current_supply] = await Promise.all([get_creator, get_price, get_max_supply, get_current_supply])
                             let collection = {
                                 chain,
                                 address: collection_address,
@@ -116,27 +124,35 @@ const runApp = async () => {
                                 console.log("collection", collection)
 
                                 if (current_supply as number > 0) {
-                                    let nfts_id_owner = await Moralis.EvmApi.nft.getNFTOwners({
-                                        address: collection_address,
-                                        chain: evm_chain,
-                                        format: "decimal",
-                                        mediaItems: false
-                                    }).then(xs => xs.raw.result.map(x => {
-                                        return {
-                                            chain,
-                                            collection: collection_address,
-                                            token_id: x.token_id,
-                                            owner: x.owner_of
-                                        }
-                                    }))
-                                    console.log("nfts_id_owner", nfts_id_owner)
+                                    let nfts = Array(current_supply).map((_, i) => { return {
+                                        chain,
+                                        collection: collection_address,
+                                        token_id: i.toString(),
+                                    }})
+                                    
+                                    // let nfts_id_owner = await Moralis.EvmApi.nft.getNFTOwners({
+                                    //     address: collection_address,
+                                    //     chain: evm_chain,
+                                    //     format: "decimal",
+                                    //     mediaItems: false
+                                    // }).then(xs => xs.raw.result.map(x => {
+                                    //     return {
+                                    //         chain,
+                                    //         collection: collection_address,
+                                    //         token_id: x.token_id,
+                                    //         owner: x.owner_of
+                                    //     }
+                                    // }))
+                                    // console.log("nfts_id_owner", nfts_id_owner)
                                     let nfts_metadata: void[] = await promise_sequential(
-                                        nfts_id_owner.map(x => async () => {
+                                        nfts.map(x => async () => {
                                             console.log("getting metadata for nft", x)
                                             let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
+                                            let owner = await call(collection_address, collection_abi, "ownerOf", [x.token_id], evm_chain)
+                                            
                                             if (already_has_metadata) {
                                                 console.log("already_has_metadata", x)
-                                                await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", x)
+                                                await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", {...x, owner})
                                             } else {
                                                 let nft_generator_uri_instance = (metadata as any).generator_url + `/?seed=${sha256(`${process.env.SEED_SHA256_SECRET},${x.chain},${x.collection},${x.token_id}`)}&token_id=${x.token_id}`
                                                 console.log("nft_generator_uri_instance", nft_generator_uri_instance)
@@ -166,6 +182,7 @@ const runApp = async () => {
                                                 console.log("nft_metadata", nft_metadata)
                                                 let nft_with_metadata = {
                                                     ...x,
+                                                    owner,
                                                     metadata: {
                                                         ...nft_metadata,
                                                         generator_instance_url: nft_generator_uri_instance,
@@ -195,16 +212,23 @@ const runApp = async () => {
 
 const express = require('express');
 
-// Constants
-const PORT = 8080;
+// // Constants
+// const PORT = 8080;
+//
+// // App
+// const app = express();
+// app.get('/', (req, res) => {
+//    
+//   runApp().then(() => res.send('Done'));
+// });
+//
+// app.listen(PORT, () => {
+//   console.log(`Running on http://localhost:${PORT}`);
+// });
+let loop = async () => {
+    await runApp()
+    await new Promise(r => setTimeout(r, 10*1000));
+    await loop()
+}
+loop()
 
-// App
-const app = express();
-app.get('/', (req, res) => {
-    
-  runApp().then(() => res.send('Done'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Running on http://localhost:${PORT}`);
-});
