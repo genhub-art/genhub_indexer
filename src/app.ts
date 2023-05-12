@@ -93,10 +93,10 @@ const runApp = async () => {
             let collections_metadatas =
                 await promise_sequential(
                     collections.map((collection_address) => async () => {
+                            // let collection_already_exists = (await query("select * from nftm.collections where chain = :chain and address = :address", {chain, address: collection_address}))
                             let uri: string = await call(collection_address, collection_abi, "contractURI", [], evm_chain)
                             let get_creator: string = await call(collection_address, collection_abi, "creator", [], evm_chain).then((x:string) => x.toLowerCase())
-                            let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => {
-                            })
+                            let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => { })
                             let get_price = call(collection_address, collection_abi, "getPrice", [], evm_chain)
                             let get_max_supply = call(collection_address, collection_abi, "getMaxTid", [], evm_chain)
                             let get_current_supply = call(collection_address, collection_abi, "getCurrentTid", [], evm_chain)
@@ -145,7 +145,7 @@ const runApp = async () => {
                                             await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
                                             console.log("page.goto")
                                             //@ts-ignore
-                                            let nft_metadata = await page.evaluate(() => metadata())
+                                            let nft_metadata = await page.evaluate(() => metadata()).catch(e => {console.log("page.evaluate error: ", e); return {}})
                                             await page.close()
                                             await browser.close()
                                             console.log("nft_metadata", nft_metadata)
