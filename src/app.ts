@@ -111,62 +111,78 @@ const runApp = async () => {
                                 current_supply,
                                 max_supply
                             } as Collection
-                            await query("insert into nftm.collections (chain, address, creator, metadata, price, current_supply, max_supply) values (:chain, :address, :creator, :metadata, :price, :current_supply, :max_supply) on conflict (chain, address) do update set creator = :creator, metadata = :metadata, price = :price, current_supply = :current_supply, max_supply = :max_supply", collection)
-                            console.log("collection", collection)
+                            if (metadata) {
+                                await query("insert into nftm.collections (chain, address, creator, metadata, price, current_supply, max_supply) values (:chain, :address, :creator, :metadata, :price, :current_supply, :max_supply) on conflict (chain, address) do update set creator = :creator, metadata = :metadata, price = :price, current_supply = :current_supply, max_supply = :max_supply", collection)
+                                console.log("collection", collection)
 
-                            if (current_supply as number > 0) {
-                                let nfts_id_owner = await Moralis.EvmApi.nft.getNFTOwners({
-                                    address: collection_address,
-                                    chain: evm_chain,
-                                    format: "decimal",
-                                    mediaItems: false
-                                }).then(xs => xs.raw.result.map(x => {
-                                    return {chain, collection: collection_address, token_id: x.token_id, owner: x.owner_of}
-                                }))
-                                console.log("nfts_id_owner", nfts_id_owner)
-                                let nfts_metadata: void[] = await promise_sequential(
-                                    nfts_id_owner.map(x => async () => {
-                                        console.log("getting metadata for nft", x)
-                                        let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
-                                        if (already_has_metadata) {
-                                            console.log("already_has_metadata", x)
-                                            await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", x)
-                                        } else {
-                                            let nft_generator_uri_instance = (metadata as any).generator_url + `/?seed=${sha256(`${process.env.SEED_SHA256_SECRET},${x.chain},${x.collection},${x.token_id}`)}&token_id=${x.token_id}`
-                                            console.log("nft_generator_uri_instance", nft_generator_uri_instance)
-                                            let browser = await puppeteer.launch({
-                                                executablePath: 'google-chrome-stable',
-                                                // executablePath: '/usr/bin/google-chrome',
-                                                args: ['--no-sandbox', '--disable-setuid-sandbox']
-                                            }).catch(e => {console.log("puppeteer launch error: ", e); return undefined})
-                                            console.log("loaded puppeteer", browser)
-                                            let page = await browser.newPage().catch(e => {console.log("browser.newPage error: ", e); return undefined})
-                                            console.log("page")
-                                            await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
-                                            console.log("page.goto")
-                                            //@ts-ignore
-                                            let nft_metadata = await page.evaluate(() => metadata()).catch(e => {console.log("page.evaluate error: ", e); return {}})
-                                            await page.close()
-                                            await browser.close()
-                                            console.log("nft_metadata", nft_metadata)
-                                            let nft_with_metadata = {
-                                                ...x,
-                                                metadata: {
-                                                    ...nft_metadata,
-                                                    generator_instance_url: nft_generator_uri_instance,
-                                                    animation_url: nft_generator_uri_instance,
-                                                    external_url: nft_generator_uri_instance
-                                                }
-                                            } as NFT
-                                            
-                                            await query("insert into nftm.nfts (chain, collection, token_id, owner, metadata) values (:chain, :collection, :token_id, :owner, :metadata::json) on conflict (chain, collection, token_id) do update set owner=excluded.owner, metadata=excluded.metadata", nft_with_metadata)
-
+                                if (current_supply as number > 0) {
+                                    let nfts_id_owner = await Moralis.EvmApi.nft.getNFTOwners({
+                                        address: collection_address,
+                                        chain: evm_chain,
+                                        format: "decimal",
+                                        mediaItems: false
+                                    }).then(xs => xs.raw.result.map(x => {
+                                        return {
+                                            chain,
+                                            collection: collection_address,
+                                            token_id: x.token_id,
+                                            owner: x.owner_of
                                         }
-
                                     }))
-                                console.log("nfts_metadata", nfts_metadata)
+                                    console.log("nfts_id_owner", nfts_id_owner)
+                                    let nfts_metadata: void[] = await promise_sequential(
+                                        nfts_id_owner.map(x => async () => {
+                                            console.log("getting metadata for nft", x)
+                                            let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
+                                            if (already_has_metadata) {
+                                                console.log("already_has_metadata", x)
+                                                await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", x)
+                                            } else {
+                                                let nft_generator_uri_instance = (metadata as any).generator_url + `/?seed=${sha256(`${process.env.SEED_SHA256_SECRET},${x.chain},${x.collection},${x.token_id}`)}&token_id=${x.token_id}`
+                                                console.log("nft_generator_uri_instance", nft_generator_uri_instance)
+                                                let browser = await puppeteer.launch({
+                                                    executablePath: 'google-chrome-stable',
+                                                    // executablePath: '/usr/bin/google-chrome',
+                                                    args: ['--no-sandbox', '--disable-setuid-sandbox']
+                                                }).catch(e => {
+                                                    console.log("puppeteer launch error: ", e);
+                                                    return undefined
+                                                })
+                                                console.log("loaded puppeteer", browser)
+                                                let page = await browser.newPage().catch(e => {
+                                                    console.log("browser.newPage error: ", e);
+                                                    return undefined
+                                                })
+                                                console.log("page")
+                                                await page.goto(nft_generator_uri_instance.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/"), {waitUntil: 'networkidle2'});
+                                                console.log("page.goto")
+                                                //@ts-ignore
+                                                let nft_metadata = await page.evaluate(() => metadata()).catch(e => {
+                                                    console.log("page.evaluate error: ", e);
+                                                    return {}
+                                                })
+                                                await page.close()
+                                                await browser.close()
+                                                console.log("nft_metadata", nft_metadata)
+                                                let nft_with_metadata = {
+                                                    ...x,
+                                                    metadata: {
+                                                        ...nft_metadata,
+                                                        generator_instance_url: nft_generator_uri_instance,
+                                                        animation_url: nft_generator_uri_instance,
+                                                        external_url: nft_generator_uri_instance
+                                                    }
+                                                } as NFT
+
+                                                await query("insert into nftm.nfts (chain, collection, token_id, owner, metadata) values (:chain, :collection, :token_id, :owner, :metadata::json) on conflict (chain, collection, token_id) do update set owner=excluded.owner, metadata=excluded.metadata", nft_with_metadata)
+
+                                            }
+
+                                        }))
+                                    console.log("nfts_metadata", nfts_metadata)
+                                }
+                                await new Promise(r => setTimeout(r, 30));
                             }
-                            await new Promise(r => setTimeout(r, 30));
                         }
                     )).catch(e => console.log("promise_sequential error: ", e))
         }))
