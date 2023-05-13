@@ -24,7 +24,7 @@ type Collection = {
     current_supply: number;
     max_supply: number;
 }
-type ERC1155TokenMetadata = {
+type ERCTokenMetadata = {
     name: string;
     description: string;
     image: string;
@@ -40,7 +40,7 @@ type NFT = {
     collection: string;
     token_id: string;
     owner: string;
-    metadata: ERC1155TokenMetadata;
+    metadata: ERCTokenMetadata;
 };
 
 let sha256 = (x:string) => createHash('sha256').update(x).digest('hex');
@@ -86,7 +86,7 @@ const runApp = async () => {
             let collections_metadatas =
                 await promise_sequential(
                     collections.map((collection_address) => async () => {
-                            let existing_metadata: {metadata:ERC1155TokenMetadata}[] = await query("select metadata, current_supply from nftm.collections where chain = :chain and address = :address", {chain, address: collection_address})
+                            let existing_metadata: {metadata:ERCTokenMetadata}[] = await query("select metadata, current_supply from nftm.collections where chain = :chain and address = :address", {chain, address: collection_address})
                             let uri: string = await call(collection_address, collection_abi, "contractURI", [], chain)
                             let get_creator: string = await call(collection_address, collection_abi, "creator", [], chain).then((x:string) => x.toLowerCase())
                             let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => { })
@@ -179,24 +179,6 @@ const runApp = async () => {
 };
 
 
-
-'use strict';
-
-const express = require('express');
-
-// // Constants
-// const PORT = 8080;
-//
-// // App
-// const app = express();
-// app.get('/', (req, res) => {
-//    
-//   runApp().then(() => res.send('Done'));
-// });
-//
-// app.listen(PORT, () => {
-//   console.log(`Running on http://localhost:${PORT}`);
-// });
 let loop = async () => {
     await runApp()
     await new Promise(r => setTimeout(r, 10*1000));
