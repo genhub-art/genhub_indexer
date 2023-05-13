@@ -8,7 +8,7 @@ Requires .env
 
 ```
 DATABASE_URL=...
-SEED_SHA256_SECRET
+SEED_SHA256_SECRET=...
 ```
 
 DATABASE_URL is a connection string to a PostgreSQL database. Currently using Supabase.
