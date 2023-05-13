@@ -91,8 +91,8 @@ const runApp = async () => {
                             let get_creator: string = await call(collection_address, collection_abi, "creator", [], chain).then((x:string) => x.toLowerCase())
                             let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => { })
                             let get_price = call(collection_address, collection_abi, "getPrice", [], chain)
-                            let get_max_supply = call(collection_address, collection_abi, "getMaxTid", [], chain)
-                            let get_current_supply = call(collection_address, collection_abi, "getCurrentTid", [], chain)
+                            let get_max_supply = call(collection_address, collection_abi, "getMaxTid", [], chain).then((x) => `${x}`.replace("n",'')).then(Number)
+                            let get_current_supply = call(collection_address, collection_abi, "getCurrentTid", [], chain).then((x) => `${x}`.replace("n",'')).then(Number)
                             //do above requests in parallel
                             let metadata = existing_metadata.length > 0 ? existing_metadata[0].metadata : await get_metadata
                             let [creator, price, max_supply, current_supply] = await Promise.all([get_creator, get_price, get_max_supply, get_current_supply])
@@ -108,9 +108,11 @@ const runApp = async () => {
                             if (metadata) {
                                 await query("insert into nftm.collections (chain, address, creator, metadata, price, current_supply, max_supply) values (:chain, :address, :creator, :metadata, :price, :current_supply, :max_supply) on conflict (chain, address) do update set creator = :creator, metadata = :metadata, price = :price, current_supply = :current_supply, max_supply = :max_supply", collection)
                                 console.log("collection", collection)
-
+                                console.log("current_supply", current_supply as number, "max_supply", max_supply as number)
                                 if (current_supply as number > 0) {
-                                    let nfts = Array(current_supply).map((_, i) => { return {
+                                    let nfts = Array(current_supply as number).fill(0).map((_, i) => { 
+                                        console.log("getting nft", i)
+                                        return {
                                         chain,
                                         collection: collection_address,
                                         token_id: i.toString(),
@@ -118,12 +120,12 @@ const runApp = async () => {
                                     
                                     let nfts_metadata: void[] = await promise_sequential(
                                         nfts.map(x => async () => {
-                                            console.log("getting metadata for nft", x)
+                                            // console.log("getting metadata for nft", x)
                                             let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
                                             let owner = await call(collection_address, collection_abi, "ownerOf", [x.token_id], chain)
                                             
                                             if (already_has_metadata) {
-                                                console.log("already_has_metadata", x)
+                                                // console.log("already_has_metadata", x)
                                                 await query("update nftm.nfts set owner = :owner where chain = :chain and collection = :collection and token_id = :token_id", {...x, owner})
                                             } else {
                                                 let nft_generator_uri_instance = (metadata as any).generator_url + `/?seed=${sha256(`${process.env.SEED_SHA256_SECRET},${x.chain},${x.collection},${x.token_id}`)}&token_id=${x.token_id}`
