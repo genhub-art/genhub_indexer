@@ -19,7 +19,6 @@
     "ethers": "^6.3.0",
     "ethers-ts": "^5.5.3",
     "express": "^4.17.1",
-    "moralis": "^2.18.4",
     "node-fetch": "^3.3.1",
     "pg": "^8.10.0",
     "puppeteer": "^19.11.1",

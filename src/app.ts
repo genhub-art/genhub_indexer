@@ -1,5 +1,3 @@
-import Moralis from "moralis";
-import { EvmChain } from "@moralisweb3/common-evm-utils";
 import {collection_abi, factory_abi} from "./abis.js";
 import fetch from "cross-fetch";
 import { Pool } from "pg"
@@ -46,19 +44,14 @@ type NFT = {
 };
 
 let sha256 = (x:string) => createHash('sha256').update(x).digest('hex');
-
+let ethersjs_rpc_providers = {
+    "bsc_testnet": 'https://data-seed-prebsc-1-s1.binance.org:8545'
+}
 let call = <a>(address, abi, functionName, params, chain) : Promise<a> => {
-    let ethersjs_provider = new ethers.JsonRpcProvider('https://data-seed-prebsc-1-s1.binance.org:8545')
+    let ethersjs_provider = new ethers.JsonRpcProvider(ethersjs_rpc_providers[chain])
     let ethersjs_contract = new ethers.Contract(address, abi, ethersjs_provider)
     return ethersjs_contract[functionName](...params)
 }
-    // Moralis.EvmApi.utils.runContractFunction({
-    // address,
-    // abi,
-    // functionName,
-    // params,
-    // chain,
-// }).then(x => x.toJSON() as a);
 let http_get = <a>(url:string): Promise<a> => fetch(url).then(res => res.json() as a);
 
 const pool =  new Pool({connectionString: process.env.DATABASE_URL})
@@ -77,13 +70,6 @@ let dbg = <a>(x:a) => {console.log(x); return x}
 let promise_sequential = async <a> (xs: (() => Promise<a>)[]) =>
     xs.reduce(async (acc, x) => [...await acc, await x()], Promise.resolve([] as a[]))
 const runApp = async () => {
-    try{
-    await Moralis.start({
-        apiKey: process.env.MORALIS_API_KEY,
-        // ...and any other configuration
-    });
-    } catch (e) {}
-    console.log("loaded moralis")
 
     try {
         let chains_and_factories =
@@ -91,22 +77,22 @@ const runApp = async () => {
                 .then((xs : {chain:string; address:string}[]) => xs.map(x => { return {
                     chain: x.chain,
                     factory_address: x.address,
-                    evm_chain: x.chain == "bsc_testnet" ? EvmChain.BSC_TESTNET : EvmChain.BSC}}))
+                }}))
         console.log(chains_and_factories)
-        await promise_sequential(chains_and_factories.map(({chain, factory_address, evm_chain}) => async () => {
+        await promise_sequential(chains_and_factories.map(({chain, factory_address}) => async () => {
             console.log("processing chain", chain, "factory", factory_address)
-            let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], evm_chain);
+            let collections: string [] = await call(factory_address, factory_abi, "getAllCollections", [], chain);
             console.log(collections)
             let collections_metadatas =
                 await promise_sequential(
                     collections.map((collection_address) => async () => {
                             let existing_metadata: {metadata:ERC1155TokenMetadata}[] = await query("select metadata, current_supply from nftm.collections where chain = :chain and address = :address", {chain, address: collection_address})
-                            let uri: string = await call(collection_address, collection_abi, "contractURI", [], evm_chain)
-                            let get_creator: string = await call(collection_address, collection_abi, "creator", [], evm_chain).then((x:string) => x.toLowerCase())
+                            let uri: string = await call(collection_address, collection_abi, "contractURI", [], chain)
+                            let get_creator: string = await call(collection_address, collection_abi, "creator", [], chain).then((x:string) => x.toLowerCase())
                             let get_metadata = http_get(uri.replace("ipfs://", "https://ipfs.moralis.io:2053/ipfs/")).catch(_ => { })
-                            let get_price = call(collection_address, collection_abi, "getPrice", [], evm_chain)
-                            let get_max_supply = call(collection_address, collection_abi, "getMaxTid", [], evm_chain)
-                            let get_current_supply = call(collection_address, collection_abi, "getCurrentTid", [], evm_chain)
+                            let get_price = call(collection_address, collection_abi, "getPrice", [], chain)
+                            let get_max_supply = call(collection_address, collection_abi, "getMaxTid", [], chain)
+                            let get_current_supply = call(collection_address, collection_abi, "getCurrentTid", [], chain)
                             //do above requests in parallel
                             let metadata = existing_metadata.length > 0 ? existing_metadata[0].metadata : await get_metadata
                             let [creator, price, max_supply, current_supply] = await Promise.all([get_creator, get_price, get_max_supply, get_current_supply])
@@ -130,25 +116,11 @@ const runApp = async () => {
                                         token_id: i.toString(),
                                     }})
                                     
-                                    // let nfts_id_owner = await Moralis.EvmApi.nft.getNFTOwners({
-                                    //     address: collection_address,
-                                    //     chain: evm_chain,
-                                    //     format: "decimal",
-                                    //     mediaItems: false
-                                    // }).then(xs => xs.raw.result.map(x => {
-                                    //     return {
-                                    //         chain,
-                                    //         collection: collection_address,
-                                    //         token_id: x.token_id,
-                                    //         owner: x.owner_of
-                                    //     }
-                                    // }))
-                                    // console.log("nfts_id_owner", nfts_id_owner)
                                     let nfts_metadata: void[] = await promise_sequential(
                                         nfts.map(x => async () => {
                                             console.log("getting metadata for nft", x)
                                             let already_has_metadata = (await query("select token_id from nftm.nfts where chain = :chain and collection = :collection and token_id = :token_id", x)).length > 0
-                                            let owner = await call(collection_address, collection_abi, "ownerOf", [x.token_id], evm_chain)
+                                            let owner = await call(collection_address, collection_abi, "ownerOf", [x.token_id], chain)
                                             
                                             if (already_has_metadata) {
                                                 console.log("already_has_metadata", x)
