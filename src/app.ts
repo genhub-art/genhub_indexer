@@ -198,7 +198,6 @@ const express = require('express');
 //   console.log(`Running on http://localhost:${PORT}`);
 // });
 let loop = async () => {
-    console.log(process.env)
     await runApp()
     await new Promise(r => setTimeout(r, 10*1000));
     await loop()
