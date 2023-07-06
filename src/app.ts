@@ -45,7 +45,8 @@ type NFT = {
 
 let sha256 = (x:string) => createHash('sha256').update(x).digest('hex');
 let ethersjs_rpc_providers = {
-    "bsc_testnet": 'https://data-seed-prebsc-1-s1.binance.org:8545'
+    "bsc_testnet": 'https://data-seed-prebsc-1-s1.binance.org:8545',
+    "bsc_mainnet": 'https://bsc-dataseed.binance.org/',
 }
 let call = <a>(address, abi, functionName, params, chain) : Promise<a> => {
     let ethersjs_provider = new ethers.JsonRpcProvider(ethersjs_rpc_providers[chain])
